@@ -91,6 +91,7 @@ class lstm(nn.Module):
         outputs, (hidden, cell) = self.lstm(source)
         prediction = self.fc(outputs)
         return prediction
+    
 # columns = ['电压', '电流', '功率', '温度', '充电容量', '放电容量', '总容量', '充电能量', '放电能量', '总能量']
 # seq_len = 24
 # pred_len = 48
