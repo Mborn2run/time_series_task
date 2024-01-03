@@ -12,7 +12,7 @@ import multiprocessing
 if __name__ == '__main__':
         multiprocessing.freeze_support()
         url = ['data/eng_pred/processed.csv']
-        columns = ['循环时间', '电流', '总容量', 'CAN2_Cell_T1_A1(T)', 'CAN2_Cell_U_N1(V)', 'CAN2_BMSSOC', 'dQ', 'dV', 'dQ/dV', 'dV/dQ', 'dVdQ', 'dI', 'dT', 'dR']
+        columns = ['airTemperature', 'dewTemperature', 'windSpeed', 'hour', 'day_of_week', 'month', 'Power'] # columns' element must conform to the order of the data file columns 
         target = ['Power']
         time_line = [next((element for element in columns if 'time' in element or '时间' in element), None)]
         features = get_features(columns, target)
