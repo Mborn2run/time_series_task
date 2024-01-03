@@ -37,16 +37,34 @@ class EarlyStopping:
         torch.save(model.state_dict(), path + '/' + f'{model_name}.pth')
         self.val_loss_min = val_loss
 
+def get_features(columns, target):
+    if len(columns) == 1 and len(target) == 1 and columns[0] == target[0]:
+        return 'S'
+    elif len(columns) > 1 and len(target) == 1 and target[0] in columns:
+        return 'MS'
+    elif len(columns) > 1 and len(target) > 1 and all(t in columns for t in target):
+        return 'M'
+    else:
+        raise ValueError('输入的columns和target不符合任何一个条件')
 
-def visual(true, preds=None, name='./pic/test.pdf', title='test'):
+def target_index(columns, target):
+    indices = [columns.index(t) for t in target if t in columns]
+    return indices
+
+def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None):
     """
     Results visualization
     """
     plt.figure()
     plt.ioff()  # 关闭交互模式
-    plt.plot(true, label='GroundTruth', linewidth=3)
-    if preds is not None:
-        plt.plot(preds, label='Prediction', linewidth=2)
+    if x is None:
+        plt.plot(true, label='GroundTruth', linewidth=3)
+        if preds is not None:
+            plt.plot(preds, label='Prediction', linewidth=2)
+    else:
+        plt.plot(x, true, label='GroundTruth', linewidth=3)
+        if preds is not None:
+            plt.plot(x, preds, label='Prediction', linewidth=2)
     plt.title(title)  # 添加标题
     plt.legend()
     plt.savefig(name, bbox_inches='tight')

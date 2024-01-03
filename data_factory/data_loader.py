@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pickle
+import numpy as np
+from utils.tools import target_index
 
 class Dataset_Battery(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
@@ -24,6 +26,7 @@ class Dataset_Battery(Dataset):
 
         self.features = features
         self.target = target
+        self.target_index = target_index(columns, target)
         self.scale = scale
         self.columns = columns
         self.scaler = None
@@ -52,7 +55,7 @@ class Dataset_Battery(Dataset):
         if self.features == 'M' or self.features == 'MS':
             df_data = df_raw
         elif self.features == 'S':
-            df_data = df_raw[[self.target]]
+            df_data = df_raw[self.target]
 
         if self.scale:
             if self.set_type == 0: # train
@@ -84,10 +87,14 @@ class Dataset_Battery(Dataset):
     def __len__(self):
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
-    def inverse_transform(self, data):
+    def inverse_transform(self, data, target_index=None):
+        if target_index is None:
+            target_index = self.target_index
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
-        return scaler.inverse_transform(data)
+        temp = np.zeros((data.shape[0], self.data_x.shape[-1]))
+        temp[:, target_index] = data
+        return scaler.inverse_transform(temp)[:, target_index]
 
 
 class Battery_Pred(Dataset):

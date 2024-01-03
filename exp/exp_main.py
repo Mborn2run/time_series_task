@@ -6,7 +6,7 @@ import time, os
 import numpy as np
 from tqdm import tqdm
 import Ranger
-from utils.tools import EarlyStopping, metric, visual
+from utils.tools import EarlyStopping, metric, visual, target_index
 import logging
 logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
     datefmt='%Y-%m-%d:%H:%M:%S',
@@ -25,10 +25,10 @@ def _predict(net, batch_x, batch_y, args):
             return outputs
 
         outputs = _run_model()
-        f_dim = -1 if args['features'] == 'MS' else 0
-        outputs = outputs[:, -args['size'][-1]:, f_dim:]
-        batch_y = batch_y[:, -args['size'][-1]:, f_dim:].to(args['device'])
-
+        
+        f_dim = target_index(args['columns'], args['target'])  # 请替换为你想要的列的索引
+        outputs = outputs[:, -args['size'][-1]:, f_dim]
+        batch_y = batch_y[:, -args['size'][-1]:, f_dim].to(args['device'])
         return outputs, batch_y
 
 def train(net, criterion, train_dataloader, valid_dataloader, args):
@@ -130,9 +130,10 @@ def train(net, criterion, train_dataloader, valid_dataloader, args):
         
     return
 
-def test(net, test_dataset, test_dataloader, args):
+def test(net, test_dataset, test_dataloader, criterion, args):
     net.load_state_dict(torch.load(os.path.join(args['checkpoints'], f'{args["name"]}.pth')))
-
+    print('testing on:', args['device'])
+    net.to(args['device'])
     preds = []
     trues = []
     folder_path = './test_results/'
@@ -145,26 +146,34 @@ def test(net, test_dataset, test_dataloader, args):
             batch_x = batch_x.float().to(args['device'])
             batch_y = batch_y.float().to(args['device'])
 
-            outputs, batch_y = _predict(net, batch_x, batch_y, args)
+            outputs, target = _predict(net, batch_x, batch_y, args)
 
             outputs = outputs.detach().cpu().numpy()
-            batch_y = batch_y.detach().cpu().numpy()
-
+            target = target.detach().cpu().numpy()
+            Loss = criterion(torch.from_numpy(outputs), torch.from_numpy(target))
+            print(f'第{i+1}次循环的损失值: {Loss.item()}')
             pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
-            true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
+            true = target  # batch_y.detach().cpu().numpy()  # .squeeze()
             preds.append(pred)
             trues.append(true)
-            if i % 2 == 0:
+            
+            if i % 20 == 0:
                 input = batch_x.detach().cpu().numpy()
-                if args['features'] == 'M':
-                    gt = test_dataset.inverse_transform(np.concatenate((input[0], true[0]), axis=0))
-                    pd = test_dataset.inverse_transform(np.concatenate((input[0], pred[0]), axis=0))
-                    for j in range(gt.shape[1]):
-                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['columns'][j])
+                f_dim = test_dataset.target_index
+                gt = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], true[0]), axis=0))
+                pd = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], pred[0]), axis=0))
+                if args['time_line'] is None:
+                    time = None
                 else:
-                    gt = test_dataset.inverse_transform(np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0).reshape(-1, 1))
-                    pd = test_dataset.inverse_transform(np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0).reshape(-1, 1))
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'])
+                    time_dim = target_index(args['columns'], args['time_line'])
+                    time = test_dataset.inverse_transform(np.concatenate((input[0][:, time_dim], 
+                                                                          batch_y[0][-args['size'][-1]:, time_dim]),
+                                                                          axis=0), target_index = time_dim)
+                if args['features'] == 'M':
+                    for j in range(gt.shape[1]):
+                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['target'][j], x=time)
+                else:
+                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'], x=time)
 
     preds = np.concatenate(preds, axis=0)
     trues = np.concatenate(trues, axis=0)
@@ -222,4 +231,3 @@ def predict(net, pred_dataloader, args, load=False):
     np.save(folder_path + 'real_prediction.npy', preds)
 
     return preds
-
