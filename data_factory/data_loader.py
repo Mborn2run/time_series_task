@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 from utils.tools import target_index
 
-class Dataset_Battery(Dataset):
+class Dataset_Series(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
                  features='M',target='OT', scale=True):
         # size [seq_len, label_len, pred_len]
@@ -97,7 +97,7 @@ class Dataset_Battery(Dataset):
         return scaler.inverse_transform(temp)[:, target_index]
 
 
-class Battery_Pred(Dataset):
+class Series_Pred(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
                  features='M',target='OT', scale=True,inverse=False):
         if size == None:

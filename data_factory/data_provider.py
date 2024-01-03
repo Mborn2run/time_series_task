@@ -1,8 +1,8 @@
 from torch.utils.data import DataLoader
-from data_factory.dataloader import Dataset_Battery, Battery_Pred
+from data_factory.data_loader import Dataset_Series, Series_Pred
 
 def data_provider(args, flag, num_workers=0):
-    Data = Dataset_Battery
+    Data = Dataset_Series
     if flag == 'test':
         shuffle_flag = False
         drop_last = False
@@ -11,7 +11,7 @@ def data_provider(args, flag, num_workers=0):
         shuffle_flag = False
         drop_last = False
         batch_size = 1
-        Data = Battery_Pred
+        Data = Series_Pred
     else:
         shuffle_flag = True
         drop_last = True
