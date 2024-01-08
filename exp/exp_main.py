@@ -162,7 +162,7 @@ def test(net, test_dataset, test_dataloader, criterion, args):
                 f_dim = test_dataset.target_index
                 gt = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], true[0]), axis=0))
                 pd = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], pred[0]), axis=0))
-                if args['time_line'] is None:
+                if args['time_line'] == [None]:
                     time = None
                 else:
                     time_dim = target_index(args['columns'], args['time_line'])

@@ -59,7 +59,10 @@ class Decoder_Attention(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, x, hidden, encoder_outputs):
-        query = hidden[-1].unsqueeze(0)
+        if isinstance(hidden, tuple): # LSTM
+            query = hidden[0][-1].unsqueeze(0)
+        else: # RNN, GRU
+            query = hidden[-1].unsqueeze(0)
         key = value = encoder_outputs.permute(1, 0, 2)
         attn_output, _ = self.attention(query, key, value)
         context = attn_output.permute(1, 0, 2)
