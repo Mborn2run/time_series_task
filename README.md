@@ -1,10 +1,11 @@
-# Time Series Prediction with LSTM
+# Time Series Prediction with 2D data
 
-This repository contains the code for training and testing a deep learning model for time series prediction using Long Short-Term Memory (LSTM) networks.
+This repository contains the code for training and testing a deep learning model for time series prediction using multiple 
+networks such as Long Short-Term Memory (LSTM), Transformer and so on.
 
 ## Table of Contents
 
-- [Time Series Prediction with LSTM](#time-series-prediction-with-lstm)
+- [Time Series Prediction with 2D data](#time-series-prediction-with-2d-data)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Requirements](#requirements)
@@ -19,7 +20,7 @@ This repository contains the code for training and testing a deep learning model
 
 ## Introduction
 
-This project focuses on predicting time series data, specifically temperature, using LSTM neural networks. The code includes data preprocessing, model definition, training, and testing steps.
+This project focuses on predicting time series data, specifically 2D data, using deep learning models. The code includes data preprocessing, model definition, training, and testing steps.
 
 ## Requirements
 
@@ -37,34 +38,47 @@ pip install -r requirements.txt
 
 ## Data
 
-The dataset used in this project contains time series data. The main feature for prediction is temperature, and additional features can be easily configured in the code. The dataset is loaded and processed using the `data_factory` module.
+The dataset used in this project contains time series data. The main feature for prediction is temperature, and additional features can be easily configured in the code. You can also use your customed datasets by changeing the variable `columns` in `run.py`. The dataset is loaded and processed using the `data_factory` module.
+
+```python
+# Example of customizing the dataset
+url = ['data/eng_pred/processed.csv'] // path to your data
+columns = ['airTemperature', 'dewTemperature', 'windSpeed', 'hour', 'day_of_week', 'month', 'Power'] # columns' element must conform to the order of the data file columns 
+target = ['Power'] # target features
+```
 
 ## Model Architecture
 
-The implemented model architecture consists of an encoder-decoder LSTM-based Seq2Seq model. The `Encoder`, `Decoder`, `Seq2Seq`, and `lstm` components are defined in the `LSTM.py` file. You can customize the architecture by adjusting the hyperparameters in the model classes.
+The implemented model architecture consists of an encoder-decoder LSTM-based Seq2Seq model, Transformer and so on. The `Encoder`, `Decoder`, `Seq2Seq`, and `RNN` components are defined in the `model` file. You can customize the architecture by adjusting the hyperparameters in the model classes.
 
 ```python
 # Example of customizing the model architecture
-encoder = Encoder(input_dim=len(columns), hidden_dim=48, num_layers=4)
-decoder = Decoder(output_dim=len(columns), hidden_dim=128, num_layers=4)
-model = Seq2Seq(encoder, decoder, device=device)
-net = lstm(input_dim=len(columns), hidden_dim=24, num_layers=2, output_dim=len(columns))
+encoder = Encoder(input_dim=len(columns), hidden_dim=16, num_layers=1, model_name='RNN', dropout=0.1)
+decoder = Decoder(output_dim=len(columns), hidden_dim=16, num_layers=1, model_name='RNN', dropout=0.1)
+decoder_attention = Decoder_Attention(output_dim=len(columns), embedding_dim = 64, hidden_dim=64, num_layers=2, num_heads=4, model_name='LSTM')
+seq2seq = Seq2Seq(encoder, decoder, device = device)
+seq2seq_attention = Seq2Seq(encoder, decoder_attention, device = device)
+
+rnn = RNN(input_dim=len(columns), hidden_dim=16, num_layers=1, output_dim=len(columns), model_name='RNN', dropout=0.1)
+
+transformer = Seq2Seq_Transfomer(input_dim=len(columns), output_dim=len(columns), d_model=128, num_encoder_layers = 2, num_decoder_layers = 2, 
+                                batch_first=True, dim_feedforward = 256)
 ```
 
 ## Training
 
-To train the model, execute the `train` function in the `exp_main.py` script. Hyperparameters such as batch size, learning rate, and optimizer type are configured in the `args` dictionary.
+To train the model, execute the `train` function in the `run.py` script. Hyperparameters such as batch size, learning rate, and optimizer type are configured in the `args` dictionary.
 
 ```bash
-python exp_main.py
+python run.py
 ```
 
 ## Testing
 
-To assess the model's performance, utilize the `test` function in the `exp_main.py` script. This function employs a pre-trained model to make predictions on the test dataset, providing evaluation metrics such as Mean Squared Error (MSE) and Mean Absolute Error (MAE).
+To assess the model's performance, utilize the `test` function in the `run.py` script. This function employs a pre-trained model to make predictions on the test dataset, providing evaluation metrics such as Mean Squared Error (MSE) and Mean Absolute Error (MAE).
 
 ```bash
-python exp_main.py
+python run.py
 ```
 
 ## Results
