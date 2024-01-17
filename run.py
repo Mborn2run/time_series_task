@@ -14,8 +14,8 @@ import multiprocessing
 
 if __name__ == '__main__':
         multiprocessing.freeze_support()
-        url = ['data/eng_pred/building_energy.csv']
-        columns = ['airTemperature', 'dewTemperature', 'windSpeed', 'hour', 'day_of_week', 'month', 'Power']
+        url = ['data/energy_pred/processed.csv']
+        columns = ['Power', 'airTemperature', 'dewTemperature', 'windSpeed', 'month', 'day', 'weekday', 'hour']
         target = ['Power']
         time_line = [next((element for element in columns if 'time' in element or '时间' in element), None)]
         features = get_features(columns, target)
@@ -89,7 +89,7 @@ if __name__ == '__main__':
                 }
         autoformer = Autoformer(autoformer_configs)
 
-        train(cnn_lstm, criterion, train_dataloader, valid_dataloader, args)
-        test(cnn_lstm, test_dataset, test_dataloader, criterion = criterion, args = args)
+        train(seq2seq, criterion, train_dataloader, valid_dataloader, args)
+        test(seq2seq, test_dataset, test_dataloader, criterion = criterion, args = args)
         # preds = predict(model, pred_dataloader, args, load=True)
         # print(preds.shape)
