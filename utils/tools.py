@@ -101,11 +101,32 @@ def MSPE(pred, true):
     return np.mean(np.square((pred - true) / true))
 
 
-def metric(pred, true):
+def R2_score(pred, true):
+    mean_true = true.mean()
+    tss = ((true - mean_true) ** 2).sum()
+    rss = ((pred - true) ** 2).sum()
+    r2 = 1 - rss / tss
+    return r2
+
+
+def Adjusted_R2_score(y_true, y_pred, n_features):
+    n_samples = len(y_true)
+    residuals = y_true - y_pred
+    rss = np.sum(residuals ** 2)
+    tss = np.sum((y_true - np.mean(y_true)) ** 2)
+    r2 = 1 - rss / tss
+    adj_r2 = 1 - (1 - r2) * (n_samples - 1) / (n_samples - n_features - 1)
+    return adj_r2
+
+
+def metric(pred, true, n_features=None):
     mae = MAE(pred, true)
     mse = MSE(pred, true)
     rmse = RMSE(pred, true)
     mape = MAPE(pred, true)
     mspe = MSPE(pred, true)
-
-    return mae, mse, rmse, mape, mspe
+    if n_features is None:
+        r2_score = R2_score(pred, true)
+    else:
+        r2_score = Adjusted_R2_score(true, pred, n_features)
+    return mae, mse, rmse, mape, mspe, r2_score

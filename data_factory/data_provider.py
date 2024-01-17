@@ -1,6 +1,7 @@
 from torch.utils.data import DataLoader
 from data_factory.data_loader import Dataset_Series, Series_Pred
 
+
 def data_provider(args, flag, num_workers=0):
     Data = Dataset_Series
     if flag == 'test':

@@ -5,27 +5,30 @@ import numpy as np
 from utils.tools import get_features
 from exp.exp_main import train, test, predict
 from model.Transformer import Seq2Seq_Transfomer
-from model.RNN import Encoder, Decoder, Seq2Seq, Decoder_Attention, RNN
+from model.Autoformer import Autoformer
+from model.RNN import Encoder, Decoder, Seq2Seq, Decoder_Attention, RNN, CNN_LSTM
+from model.AR import AR, MA, ARIMA
+from model.TCN import TemporalConvNet
 import multiprocessing
 
 
 if __name__ == '__main__':
         multiprocessing.freeze_support()
-        url = ['data/eng_pred/processed.csv']
-        columns = ['airTemperature', 'dewTemperature', 'windSpeed', 'hour', 'day_of_week', 'month', 'Power'] # columns' element must conform to the order of the data file columns 
+        url = ['data/eng_pred/building_energy.csv']
+        columns = ['airTemperature', 'dewTemperature', 'windSpeed', 'hour', 'day_of_week', 'month', 'Power']
         target = ['Power']
         time_line = [next((element for element in columns if 'time' in element or '时间' in element), None)]
         features = get_features(columns, target)
         batch_size = 128
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        num_epoch = 20
+        num_epoch = 100
         lr = 0.005
         optimizer = 'adamW'
         # criterion = torch.nn.L1Loss(reduction='sum')
         criterion = torch.nn.MSELoss()
         args = {'batch_size': batch_size, 
                 'data_path': url, 
-                'size': [24, 5, 5], 
+                'size': [48, 12, 12], # [seq_len, label_len, pred_len]
                 'columns': columns, 
                 'features': features, 
                 'target': target, 
@@ -48,18 +51,45 @@ if __name__ == '__main__':
         test_dataset, test_dataloader = data_provider(args, flag='test')
         # pred_dataset, pred_dataloader = data_provider(args, flag='pred')
 
-        encoder = Encoder(input_dim=len(columns), hidden_dim=16, num_layers=1, model_name='RNN', dropout=0.1)
-        decoder = Decoder(output_dim=len(columns), hidden_dim=16, num_layers=1, model_name='RNN', dropout=0.1)
-        decoder_attention = Decoder_Attention(output_dim=len(columns), embedding_dim = 64, hidden_dim=64, num_layers=2, num_heads=4, model_name='LSTM')
+        ar = AR(input_dim=len(columns), seq_len=args['size'][0], pred_len=args['size'][-1], model_type='VAR')
+        ma = MA(input_dim=len(columns), seq_len=args['size'][0], pred_len=args['size'][-1], kernel_size=21)
+        arima = ARIMA(input_dim=len(columns), seq_len=args['size'][0], pred_len=args['size'][-1], kernel_size=21)
+
+        tcn = TemporalConvNet(seq_len=args['size'][0], pred_len=args['size'][-1], num_inputs=len(columns), 
+                              num_outputs=len(columns), num_channels=[64], kernel_size=len(columns))
+        
+        encoder = Encoder(input_dim=len(columns), hidden_dim=32, num_layers=1, model_name='RNN', dropout=0.1)
+        decoder = Decoder(output_dim=len(columns), hidden_dim=32, num_layers=1, model_name='RNN', dropout=0.1)
+        decoder_attention = Decoder_Attention(output_dim=len(columns), embedding_dim = 64, hidden_dim=64, num_layers=2, num_heads=4, model_name='RNN')
         seq2seq = Seq2Seq(encoder, decoder, device = device)
         seq2seq_attention = Seq2Seq(encoder, decoder_attention, device = device)
 
-        rnn = RNN(input_dim=len(columns), hidden_dim=16, num_layers=1, output_dim=len(columns), model_name='RNN', dropout=0.1)
+        rnn = RNN(input_dim=len(columns), hidden_dim=32, num_layers=3, output_dim=len(columns), model_name='RNN', dropout=0.1)
+        cnn_lstm = CNN_LSTM(input_dim=len(columns), hidden_dim=16, num_layers=3, output_dim=len(columns), kernel_size=3, model_name='LSTM', dropout=0.2)
 
         transformer = Seq2Seq_Transfomer(input_dim=len(columns), output_dim=len(columns), d_model=128, num_encoder_layers = 2, num_decoder_layers = 2, 
                                         batch_first=True, dim_feedforward = 256)
+        
+        autoformer_configs = {
+                'seq_len': args['size'][0],
+                'label_len': args['size'][1],
+                'pred_len': args['size'][-1],
+                'moving_avg': 5,
+                'enc_in': len(columns),
+                'dec_in': len(columns),
+                'd_model': 64,
+                'c_out': len(columns),
+                'n_heads': 2,
+                'd_ff': 64,
+                'dropout': 0.1,
+                'activation': 'relu',
+                'factor': 1,
+                'e_layers': 2,
+                'd_layers': 2,
+                }
+        autoformer = Autoformer(autoformer_configs)
 
-        train(rnn, criterion, train_dataloader, valid_dataloader, args)
-        test(rnn, test_dataset, test_dataloader, criterion = criterion, args = args)
+        train(cnn_lstm, criterion, train_dataloader, valid_dataloader, args)
+        test(cnn_lstm, test_dataset, test_dataloader, criterion = criterion, args = args)
         # preds = predict(model, pred_dataloader, args, load=True)
         # print(preds.shape)

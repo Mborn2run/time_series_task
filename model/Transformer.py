@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from layers.Embed import DataEmbedding
+from layers.Series_decomp import series_decomp
 
 
 class Seq2Seq_Transfomer(nn.Module):
@@ -11,13 +12,16 @@ class Seq2Seq_Transfomer(nn.Module):
         self.transformer = nn.Transformer(d_model=d_model, num_encoder_layers=num_encoder_layers, num_decoder_layers=num_decoder_layers, 
                                           dim_feedforward=dim_feedforward, batch_first=batch_first)
         self.predictor = nn.Linear(d_model, output_dim)
+        self.series_decomp = series_decomp(kernel_size = 31)
 
     def forward(self, src, tgt, label_len, pred_len):
         # target mask
-        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.shape[1])
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.shape[1]).to(tgt.device)
 
         src = self.embedding(src)
         tgt = self.embedding(tgt)
+
+        src_res, src_mean = self.series_decomp(src)
 
         out = self.transformer(src, tgt, tgt_mask=tgt_mask)
         return self.predictor(out)

@@ -1,22 +1,26 @@
 import torch
 import torch.nn as nn
+from layers.Series_decomp import series_decomp
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, model_name='LSTM', dropout=0.1):
         super(Encoder, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        self.series_decomp = series_decomp(kernel_size = 13)
         if model_name == 'LSTM':
-            self.rnn = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.LSTM(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'RNN':
-            self.rnn = nn.RNN(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.RNN(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'GRU':
-            self.rnn = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.GRU(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         else:
             raise ValueError(f"Invalid model name: {model_name}")
 
     def forward(self, x):
-        return self.rnn(x)
+        res, mean = self.series_decomp(x)
+        X = torch.cat([res, mean], dim=-1)
+        return self.rnn(X)
 
 class Decoder(nn.Module):
     def __init__(self, output_dim, hidden_dim, num_layers, model_name='LSTM', dropout=0.1):
@@ -59,9 +63,9 @@ class Decoder_Attention(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, x, hidden, encoder_outputs):
-        if isinstance(hidden, tuple): # LSTM
+        if isinstance(hidden, tuple):  # LSTM
             query = hidden[0][-1].unsqueeze(0)
-        else: # RNN, GRU
+        else:  # RNN, GRU
             query = hidden[-1].unsqueeze(0)
         key = value = encoder_outputs.permute(1, 0, 2)
         attn_output, _ = self.attention(query, key, value)
@@ -100,6 +104,31 @@ class RNN(nn.Module):
         super(RNN, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        self.series_decomp = series_decomp(kernel_size = 11)
+        if model_name == 'LSTM':
+            self.rnn = nn.LSTM(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+        elif model_name == 'RNN':
+            self.rnn = nn.RNN(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+        elif model_name == 'GRU':
+            self.rnn = nn.GRU(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+        else:
+            raise ValueError(f"Invalid model name: {model_name}")
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, source, target, label_len, pred_len):
+        res, mean = self.series_decomp(source)
+        X = torch.cat([res, mean], dim=-1)
+        outputs, _ = self.rnn(X)
+        prediction = self.fc(outputs)
+        return prediction
+    
+
+class CNN_LSTM(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers, output_dim, kernel_size=3, model_name='LSTM', dropout=0.1):
+        super(CNN_LSTM, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.cnn = nn.Conv1d(input_dim, input_dim, kernel_size=kernel_size, padding=1)
         if model_name == 'LSTM':
             self.rnn = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'RNN':
@@ -109,7 +138,16 @@ class RNN(nn.Module):
         else:
             raise ValueError(f"Invalid model name: {model_name}")
         self.fc = nn.Linear(hidden_dim, output_dim)
+
     def forward(self, source, target, label_len, pred_len):
-        outputs, _ = self.rnn(source)
+        '''
+        In sequence data, we usually perform convolution operations on the length (time or sequence length) 
+        dimension because we want to capture local features or patterns of the data on the time or sequence 
+        dimension.
+        '''
+        X = source.permute(0, 2, 1)
+        X = self.cnn(X)
+        X = X.permute(0, 2, 1)
+        outputs, _ = self.rnn(X)
         prediction = self.fc(outputs)
         return prediction

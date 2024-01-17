@@ -157,7 +157,7 @@ def test(net, test_dataset, test_dataloader, criterion, args):
             preds.append(pred)
             trues.append(true)
             
-            if i % 20 == 0:
+            if i % 2 == 0:
                 input = batch_x.detach().cpu().numpy()
                 f_dim = test_dataset.target_index
                 gt = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], true[0]), axis=0))
@@ -167,7 +167,7 @@ def test(net, test_dataset, test_dataloader, criterion, args):
                 else:
                     time_dim = target_index(args['columns'], args['time_line'])
                     time = test_dataset.inverse_transform(np.concatenate((input[0][:, time_dim], 
-                                                                          batch_y[0][-args['size'][-1]:, time_dim]),
+                                                                          batch_y.detach().cpu().numpy()[0][-args['size'][-1]:, time_dim]),
                                                                           axis=0), target_index = time_dim)
                 if args['features'] == 'M':
                     for j in range(gt.shape[1]):
@@ -187,16 +187,16 @@ def test(net, test_dataset, test_dataloader, criterion, args):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
 
-    mae, mse, rmse, mape, mspe = metric(preds, trues)
-    print('mse:{}, mae:{}'.format(mse, mae))
+    mae, mse, rmse, mape, mspe, r2_score = metric(preds, trues, len(args['columns']))
+    print('mse:{}, mae:{}, r2_score:{}'.format(mse, mae, r2_score))
     f = open("result.txt", 'a')
     f.write(args['name'] + "  \n")
-    f.write('mse:{}, mae:{}'.format(mse, mae))
+    f.write('mse:{}, mae:{}, r2_score:{}'.format(mse, mae, r2_score))
     f.write('\n')
     f.write('\n')
     f.close()
 
-    np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
+    np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe, r2_score]))
     np.save(folder_path + 'pred.npy', preds)
     np.save(folder_path + 'true.npy', trues)
 
