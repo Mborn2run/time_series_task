@@ -26,6 +26,11 @@ if __name__ == '__main__':
         optimizer = 'adamW'
         # criterion = torch.nn.L1Loss(reduction='sum')
         criterion = torch.nn.MSELoss()
+        data_dim = {
+                'dim' : 3, # 2 for 2D data, 3 for 3D data, etc.
+                'data_shape': [-1, 3, 24], # must satisfy dim and count(-1) <= 1, [data_len, feature1, feature2, ...]
+        }
+        data_dim_check = True if data_dim['dim'] == 2 else (len(data_dim['data_shape']) == data_dim['dim'] and data_dim['data_shape'].count(-1) <= 1)
         args = {'batch_size': batch_size, 
                 'data_path': url, 
                 'size': [48, 12, 12], # [seq_len, label_len, pred_len]
@@ -44,7 +49,8 @@ if __name__ == '__main__':
                 'checkpoints':'./checkpoints',
                 'name': 'seq2seq_LSTM',
                 'output_attention': False,
-                'time_line': time_line,}
+                'time_line': time_line,
+                'data_dim': data_dim,}
 
         train_dataset, train_dataloader = data_provider(args, flag='train')
         valid_dataset, valid_dataloader = data_provider(args, flag='val')

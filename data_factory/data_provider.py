@@ -26,6 +26,7 @@ def data_provider(args, flag, num_workers=0):
         features=args['features'],
         target=args['target'],
         scale=args['scale'],
+        data_dim=args['data_dim']
     )
     print(flag, len(data_set))
     data_loader = DataLoader(

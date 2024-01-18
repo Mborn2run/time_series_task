@@ -8,7 +8,7 @@ from utils.tools import target_index
 
 class Dataset_Series(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
-                 features='M',target='OT', scale=True):
+                 features='M',target='OT', scale=True, data_dim=None):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -31,6 +31,8 @@ class Dataset_Series(Dataset):
         self.columns = columns
         self.scaler = None
 
+        self.data_dim = data_dim # to define the shape of data
+
         self.data_path = data_path
         self.__read_data__()
 
@@ -47,6 +49,10 @@ class Dataset_Series(Dataset):
     
     def __read_data__(self):
         df_raw = self.__format_data__()
+        if self.data_dim is not None:
+            if self.data_dim['dim'] != 2:
+                df_raw = df_raw.values.reshape(*self.data_dim['data_shape'])
+
         border1s = [0, df_raw.shape[0]//10*8 - self.seq_len, df_raw.shape[0]//10*9 - self.seq_len]
         border2s = [df_raw.shape[0]//10*8, df_raw.shape[0]//10*9, df_raw.shape[0]]
         border1 = border1s[self.set_type]
@@ -61,7 +67,7 @@ class Dataset_Series(Dataset):
             if self.set_type == 0: # train
                 self.scaler = StandardScaler()
                 train_data = df_data[border1s[0]:border2s[0]]
-                self.scaler.fit(train_data.values)
+                self.scaler.fit(train_data.values if type(train_data) == pd.DataFrame else train_data.reshape(-1, 1))
                 with open('scaler.pkl', 'wb') as f:
                     pickle.dump(self.scaler, f)
             else:
