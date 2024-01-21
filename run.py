@@ -27,8 +27,8 @@ if __name__ == '__main__':
         # criterion = torch.nn.L1Loss(reduction='sum')
         criterion = torch.nn.MSELoss()
         data_dim = {
-                'dim' : 3, # 2 for 2D data, 3 for 3D data, etc.
-                'data_shape': [-1, 3, 24], # must satisfy dim and count(-1) <= 1, [data_len, feature1, feature2, ...]
+                'dim' : 2, # 2 for 2D data, 3 for 3D data, etc.
+                'data_shape': [-1, 7, 9], # must satisfy dim and count(-1) <= 1, [data_len, feature1, feature2, ...]
         }
         data_dim_check = True if data_dim['dim'] == 2 else (len(data_dim['data_shape']) == data_dim['dim'] and data_dim['data_shape'].count(-1) <= 1)
         args = {'batch_size': batch_size, 
@@ -95,7 +95,7 @@ if __name__ == '__main__':
                 }
         autoformer = Autoformer(autoformer_configs)
 
-        train(seq2seq, criterion, train_dataloader, valid_dataloader, args)
-        test(seq2seq, test_dataset, test_dataloader, criterion = criterion, args = args)
+        train(cnn_lstm, criterion, train_dataloader, valid_dataloader, args)
+        test(cnn_lstm, test_dataset, test_dataloader, criterion = criterion, args = args)
         # preds = predict(model, pred_dataloader, args, load=True)
         # print(preds.shape)

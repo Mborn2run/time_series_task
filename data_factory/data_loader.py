@@ -6,6 +6,7 @@ import pickle
 import numpy as np
 from utils.tools import target_index
 
+
 class Dataset_Series(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
                  features='M',target='OT', scale=True, data_dim=None):
@@ -30,8 +31,7 @@ class Dataset_Series(Dataset):
         self.scale = scale
         self.columns = columns
         self.scaler = None
-
-        self.data_dim = data_dim # to define the shape of data
+        self.data_dim = data_dim
 
         self.data_path = data_path
         self.__read_data__()
@@ -47,12 +47,26 @@ class Dataset_Series(Dataset):
             df_raw = pd.read_csv(self.data_path, usecols=self.columns)
         return df_raw
     
-    def __read_data__(self):
-        df_raw = self.__format_data__()
+    def __process_data__(self, data):
+        if type(data) == pd.DataFrame:
+            data = data.values
+        else:
+            data = data.reshape(data.shape[0], -1)
+        self.feature_dim = data.shape[-1]
+        return data
+    
+    def __judge_data_dim__(self, data):
         if self.data_dim is not None:
             if self.data_dim['dim'] != 2:
-                df_raw = df_raw.values.reshape(*self.data_dim['data_shape'])
-
+                if type(data) == pd.DataFrame:
+                    data = data.values.reshape(*self.data_dim['data_shape'])
+                else:
+                    data = data.reshape(*self.data_dim['data_shape'])
+        return data
+    
+    def __read_data__(self):
+        df_raw = self.__format_data__()
+        df_raw = self.__judge_data_dim__(df_raw)
         border1s = [0, df_raw.shape[0]//10*8 - self.seq_len, df_raw.shape[0]//10*9 - self.seq_len]
         border2s = [df_raw.shape[0]//10*8, df_raw.shape[0]//10*9, df_raw.shape[0]]
         border1 = border1s[self.set_type]
@@ -67,15 +81,16 @@ class Dataset_Series(Dataset):
             if self.set_type == 0: # train
                 self.scaler = StandardScaler()
                 train_data = df_data[border1s[0]:border2s[0]]
-                self.scaler.fit(train_data.values if type(train_data) == pd.DataFrame else train_data.reshape(-1, 1))
+                self.scaler.fit(self.__process_data__(train_data))
                 with open('scaler.pkl', 'wb') as f:
                     pickle.dump(self.scaler, f)
             else:
                 with open('scaler.pkl', 'rb') as f:
                     self.scaler = pickle.load(f)
-            data = self.scaler.transform(df_data.values)
+            data = self.scaler.transform(self.__process_data__(df_data))
+            data = self.__judge_data_dim__(data)
         else:
-            data = df_data.values
+            data = self.__judge_data_dim__(self.__process_data__(df_data))
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
@@ -98,7 +113,7 @@ class Dataset_Series(Dataset):
             target_index = self.target_index
         with open('scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
-        temp = np.zeros((data.shape[0], self.data_x.shape[-1]))
+        temp = np.zeros((data.shape[0], self.feature_dim))
         temp[:, target_index] = data
         return scaler.inverse_transform(temp)[:, target_index]
 
