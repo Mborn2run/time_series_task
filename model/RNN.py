@@ -7,7 +7,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.series_decomp = series_decomp(kernel_size = 13)
+        self.series_decomp = series_decomp(kernel_size = input_dim)
         if model_name == 'LSTM':
             self.rnn = nn.LSTM(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'RNN':
@@ -39,7 +39,7 @@ class Decoder(nn.Module):
         self.fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x, hidden, encoder_outputs):
-        outputs, hidden = self.rnn(x.unsqueeze(1), hidden)
+        outputs, hidden = self.rnn(x.unsqueeze(1), hidden[-1].repeat(self.rnn.num_layers, 1, 1)) # 默认encoder的num_layers的最后一层保存所有信息，所以取最后一层，repeat到decoder的层数上。
         prediction = self.fc(outputs.squeeze(1))
         return prediction, hidden
 
@@ -106,19 +106,18 @@ class RNN(nn.Module):
         self.num_layers = num_layers
         self.series_decomp = series_decomp(kernel_size = 11)
         if model_name == 'LSTM':
-            self.rnn = nn.LSTM(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'RNN':
-            self.rnn = nn.RNN(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.RNN(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'GRU':
-            self.rnn = nn.GRU(input_dim*2, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         else:
             raise ValueError(f"Invalid model name: {model_name}")
         self.fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, source, target, label_len, pred_len):
-        res, mean = self.series_decomp(source)
-        X = torch.cat([res, mean], dim=-1)
-        outputs, _ = self.rnn(X)
+        
+        outputs, _ = self.rnn(source)
         prediction = self.fc(outputs)
         return prediction
     

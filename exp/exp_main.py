@@ -26,10 +26,10 @@ def _predict(net, batch_x, batch_y, args):
 
         outputs = _run_model()
         
-        f_dim = target_index(args['columns'], args['target'])  # 请替换为你想要的列的索引
+        f_dim = target_index(args['columns'], args['target']) if args['auto_regression']['status'] else args['auto_regression']['value']  # 请替换为你想要的列的索引
         outputs = outputs[:, -args['size'][-1]:, f_dim]
         batch_y = batch_y[:, -args['size'][-1]:, f_dim].to(args['device'])
-        return outputs, batch_y
+        return torch.maximum(outputs, torch.tensor(0.0, device=outputs.device)),  batch_y  # confirm the output is not negative
 
 def train(net, criterion, train_dataloader, valid_dataloader, args):
     def init_xavier(m):
@@ -157,11 +157,13 @@ def test(net, test_dataset, test_dataloader, criterion, args):
             preds.append(pred)
             trues.append(true)
             
-            if i % 2 == 0:
+            if i % 20 == 0:
                 input = batch_x.detach().cpu().numpy()
                 f_dim = test_dataset.target_index
                 gt = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], true[0]), axis=0))
                 pd = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], pred[0]), axis=0))
+                gt_long = test_dataset.inverse_transform(np.concatenate((input[:,-(10+args['size'][-1]):, f_dim].reshape(-1, len(f_dim)), true.reshape(-1, len(f_dim))), axis=0))
+                pd_long = test_dataset.inverse_transform(np.concatenate((input[:,-(10+args['size'][-1]):, f_dim].reshape(-1, len(f_dim)), pred.reshape(-1, len(f_dim))), axis=0))
                 if args['time_line'] == [None]:
                     time = None
                 else:
@@ -171,9 +173,11 @@ def test(net, test_dataset, test_dataloader, criterion, args):
                                                                           axis=0), target_index = time_dim)
                 if args['features'] == 'M':
                     for j in range(gt.shape[1]):
-                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['target'][j], x=time)
+                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['target'][j], x=time, valid_len=10+args['size'][-1])
+                        visual(gt_long, pd_long, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], x=time, valid_len=None)
                 else:
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'], x=time)
+                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'], x=time, valid_len=10+args['size'][-1])
+                    visual(gt_long, pd_long, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], x=time, valid_len=None)
 
     preds = np.concatenate(preds, axis=0)
     trues = np.concatenate(trues, axis=0)

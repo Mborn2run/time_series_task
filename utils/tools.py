@@ -40,7 +40,7 @@ class EarlyStopping:
 def get_features(columns, target):
     if len(columns) == 1 and len(target) == 1 and columns[0] == target[0]:
         return 'S'
-    elif len(columns) > 1 and len(target) == 1 and target[0] in columns:
+    elif len(columns) > 1 and len(target) == 1:
         return 'MS'
     elif len(columns) > 1 and len(target) > 1 and all(t in columns for t in target):
         return 'M'
@@ -51,20 +51,23 @@ def target_index(columns, target):
     indices = [columns.index(t) for t in target if t in columns]
     return indices
 
-def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None):
+def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None, valid_len = None):
     """
     Results visualization
     """
+    if valid_len:
+        true = true[-valid_len:]
+        preds = preds[-valid_len:]
     plt.figure()
     plt.ioff()  # 关闭交互模式
     if x is None:
         plt.plot(true, label='GroundTruth', linewidth=3)
         if preds is not None:
-            plt.plot(preds, label='Prediction', linewidth=2)
+            plt.plot(preds, label='Prediction', linewidth=1)
     else:
         plt.plot(x, true, label='GroundTruth', linewidth=3)
         if preds is not None:
-            plt.plot(x, preds, label='Prediction', linewidth=2)
+            plt.plot(x, preds, label='Prediction', linewidth=1)
     plt.title(title)  # 添加标题
     plt.legend()
     plt.savefig(name, bbox_inches='tight')

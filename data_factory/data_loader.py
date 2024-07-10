@@ -9,7 +9,7 @@ from utils.tools import target_index
 
 class Dataset_Series(Dataset):
     def __init__(self, data_path, columns, flag='train', size=None,
-                 features='M',target='OT', scale=True, data_dim=None):
+                 features='M',target='OT', scale=True, data_dim=None, date_unprocessed='no', auto_regression={'status': True, 'value': 2}):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -27,11 +27,12 @@ class Dataset_Series(Dataset):
 
         self.features = features
         self.target = target
-        self.target_index = target_index(columns, target)
+        self.target_index = target_index(columns, target) if auto_regression['status'] else auto_regression['value']
         self.scale = scale
         self.columns = columns
         self.scaler = None
         self.data_dim = data_dim
+        self.date_unprocessed = date_unprocessed
 
         self.data_path = data_path
         self.__read_data__()
@@ -94,8 +95,13 @@ class Dataset_Series(Dataset):
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
+        # # 给88个数据点一个间隔
+        # self.indices = [i for i in range(len(self.data_x) - self.seq_len - self.pred_len + 1) if i % 88 == 0]
 
     def __getitem__(self, index):
+        #
+        # index = self.indices[index]
+
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
@@ -106,6 +112,7 @@ class Dataset_Series(Dataset):
         return seq_x, seq_y
 
     def __len__(self):
+        # return len(self.indices)
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data, target_index=None):
