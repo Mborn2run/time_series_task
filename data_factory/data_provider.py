@@ -27,7 +27,8 @@ def data_provider(args, flag, num_workers=0):
         target=args['target'],
         scale=args['scale'],
         data_dim=args['data_dim'],
-        date_unprocessed = args['date_unprocessed'],
+        timeenc=args['timeenc'],
+        freq=args['freq'],
         auto_regression=args['auto_regression']
     )
     print(flag, len(data_set))

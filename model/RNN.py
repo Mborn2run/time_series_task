@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from layers.Series_decomp import series_decomp
+from layers.Embed import DataEmbedding_wo_pos
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, model_name='LSTM', dropout=0.1):
@@ -76,48 +77,81 @@ class Decoder_Attention(nn.Module):
         return prediction, hidden
 
 class Seq2Seq(nn.Module):
-    def __init__(self, encoder, decoder, device):
+    def __init__(self, encoder, decoder, configs):
         super(Seq2Seq, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
-        self.device = device
+        self.device = configs['device']
+        self.enc_embedding = DataEmbedding_wo_pos(configs['enc_in'], configs['d_model'], configs['embed_type'], configs['freq'],
+                                                  configs['dropout'])
+        self.dec_embedding = DataEmbedding_wo_pos(configs['dec_in'], configs['d_model'], configs['embed_type'], configs['freq'],
+                                                  configs['dropout'])
 
-    def forward(self, source, target, label_len, pred_len):
-        batch_size = source.shape[0]
-        target_dim = target.shape[-1]
-        outputs = torch.zeros(batch_size, label_len + pred_len, target_dim).to(self.device)
-        encoder_outputs, hidden = self.encoder(source)
-        x = target[:, 0, :]
-        for t in range(1, label_len):
-            output, hidden = self.decoder(x, hidden, encoder_outputs)
-            outputs[:, t, :] = output
-            x = target[:, t, :]
-        for t in range(label_len, label_len+pred_len):
-            output, hidden = self.decoder(x, hidden, encoder_outputs)
-            outputs[:, t, :] = output
-            x = output
-        outputs[:, 0, :] = target[:, 0, :]
-        return outputs
+    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, label_len, pred_len):
+        # decomp init
+        mean = torch.mean(x_enc, dim=1).unsqueeze(
+            1).repeat(1, pred_len, 1)
+        zeros = torch.zeros([x_dec.shape[0], pred_len,
+                             x_dec.shape[2]], device=x_enc.device)
+        seasonal_init, trend_init = self.decomp(x_enc)
+        # decoder input
+        trend_init = torch.cat(
+            [trend_init[:, -label_len:, :], mean], dim=1)
+        seasonal_init = torch.cat(
+            [seasonal_init[:, -label_len:, :], zeros], dim=1)
+        # enc
+        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
+        # dec
+        dec_out = self.dec_embedding(seasonal_init, x_mark_dec)
+        seasonal_part, trend_part = self.decoder(dec_out, enc_out, x_mask=None, cross_mask=None,
+                                                 trend=trend_init)
+        # final
+        dec_out = trend_part + seasonal_part
+        return dec_out
+    
+    # def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, label_len, pred_len):
+    #     mean = torch.mean(x_enc, dim=1).unsqueeze(
+    #         1).repeat(1, pred_len, 1)
+    #     zeros = torch.zeros([x_dec.shape[0], pred_len,
+    #                          x_dec.shape[2]], device=self.device)
+    #     seasonal_init, trend_init = self.decomp(x_enc)
+    #     batch_size = x_enc.shape[0]
+    #     target_dim = target.shape[-1]
+    #     outputs = torch.zeros(batch_size, label_len + pred_len, target_dim).to(self.device)
+    #     encoder_outputs, hidden = self.encoder(source)
+    #     x = target[:, 0, :]
+    #     for t in range(1, label_len):
+    #         output, hidden = self.decoder(x, hidden, encoder_outputs)
+    #         outputs[:, t, :] = output
+    #         x = target[:, t, :]
+    #     for t in range(label_len, label_len+pred_len):
+    #         output, hidden = self.decoder(x, hidden, encoder_outputs)
+    #         outputs[:, t, :] = output
+    #         x = output
+    #     outputs[:, 0, :] = target[:, 0, :]
+    #     return outputs
 
 class RNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, output_dim, model_name='LSTM', dropout=0.1):
+    def __init__(self, input_dim, hidden_dim, embed_type, embedding_dim, freq, num_layers, output_dim, model_name='LSTM', dropout=0.1):
         super(RNN, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.series_decomp = series_decomp(kernel_size = 11)
+        self.enc_embedding = DataEmbedding_wo_pos(input_dim, embedding_dim, embed_type=embed_type, freq=freq, dropout=dropout)
+                                                  
         if model_name == 'LSTM':
-            self.rnn = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'RNN':
-            self.rnn = nn.RNN(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.RNN(embedding_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         elif model_name == 'GRU':
-            self.rnn = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
+            self.rnn = nn.GRU(embedding_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout)
         else:
             raise ValueError(f"Invalid model name: {model_name}")
         self.fc = nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, source, target, label_len, pred_len):
-        
-        outputs, _ = self.rnn(source)
+    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, label_len, pred_len):
+        inputs = self.enc_embedding(x_enc, x_mark_enc)
+        outputs, _ = self.rnn(inputs)
         prediction = self.fc(outputs)
         return prediction
     

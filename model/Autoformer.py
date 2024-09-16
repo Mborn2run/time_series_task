@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers.Embed import DataEmbedding
+from layers.Embed import DataEmbedding_wo_pos
 from layers.AutoCorrelation import AutoCorrelation, AutoCorrelationLayer
 from layers.Autoformer_EncDec import Encoder, Decoder, EncoderLayer, DecoderLayer, my_Layernorm, series_decomp
 import math
@@ -26,8 +26,11 @@ class Autoformer(nn.Module):
         # Embedding
         # The series-wise connection inherently contains the sequential information.
         # Thus, we can discard the position embedding of transformers.
-        self.enc_embedding = DataEmbedding(configs['enc_in'], configs['d_model'],configs['dropout'])
-        self.dec_embedding = DataEmbedding(configs['dec_in'], configs['d_model'],configs['dropout'])
+        self.enc_embedding = DataEmbedding_wo_pos(configs['enc_in'], configs['d_model'], configs['embed_type'], configs['freq'],
+                                                  configs['dropout'])
+        self.dec_embedding = DataEmbedding_wo_pos(configs['dec_in'], configs['d_model'], configs['embed_type'], configs['freq'],
+                                                  configs['dropout'])
+
 
         # Encoder
         self.encoder = Encoder(
@@ -71,22 +74,25 @@ class Autoformer(nn.Module):
             projection=nn.Linear(configs['d_model'], configs['c_out'], bias=True)
         )
 
-    def forward(self, x_enc, x_dec, enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, label_len, pred_len):
         # decomp init
-        mean = torch.mean(x_enc, dim=1).unsqueeze(1).repeat(1, self.pred_len, 1)
-        zeros = torch.zeros([x_dec.shape[0], self.pred_len, x_dec.shape[2]], device=x_enc.device)
+        mean = torch.mean(x_enc, dim=1).unsqueeze(
+            1).repeat(1, self.pred_len, 1)
+        zeros = torch.zeros([x_dec.shape[0], self.pred_len,
+                             x_dec.shape[2]], device=x_enc.device)
         seasonal_init, trend_init = self.decomp(x_enc)
         # decoder input
-        trend_init = torch.cat([trend_init[:, -self.label_len:, :], mean], dim=1)
-        seasonal_init = torch.cat([seasonal_init[:, -self.label_len:, :], zeros], dim=1)
+        trend_init = torch.cat(
+            [trend_init[:, -self.label_len:, :], mean], dim=1)
+        seasonal_init = torch.cat(
+            [seasonal_init[:, -self.label_len:, :], zeros], dim=1)
         # enc
-        enc_out = self.enc_embedding(x_enc)
-        enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
+        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
         # dec
-        dec_out = self.dec_embedding(seasonal_init)
-        seasonal_part, trend_part = self.decoder(dec_out, enc_out, x_mask=dec_self_mask, cross_mask=dec_enc_mask,
+        dec_out = self.dec_embedding(seasonal_init, x_mark_dec)
+        seasonal_part, trend_part = self.decoder(dec_out, enc_out, x_mask=None, cross_mask=None,
                                                  trend=trend_init)
         # final
         dec_out = trend_part + seasonal_part
-
-        return dec_out[:, -self.pred_len:, :]  # [B, L, D]
+        return dec_out

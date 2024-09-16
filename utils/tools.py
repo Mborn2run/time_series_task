@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import warnings
+import torch.nn.functional as F
+import torch.nn as nn
 warnings.filterwarnings('ignore')
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -48,10 +50,10 @@ def get_features(columns, target):
         raise ValueError('输入的columns和target不符合任何一个条件')
 
 def target_index(columns, target):
-    indices = [columns.index(t) for t in target if t in columns]
-    return indices
+    indices = [columns.index(t) - 1 for t in target if t in columns]
+    return indices # because the first column is time
 
-def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None, valid_len = None):
+def visual(true, preds=None, name='./pic/test.pdf', title='test', valid_len = None):
     """
     Results visualization
     """
@@ -60,14 +62,9 @@ def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None, valid_
         preds = preds[-valid_len:]
     plt.figure()
     plt.ioff()  # 关闭交互模式
-    if x is None:
-        plt.plot(true, label='GroundTruth', linewidth=3)
-        if preds is not None:
-            plt.plot(preds, label='Prediction', linewidth=1)
-    else:
-        plt.plot(x, true, label='GroundTruth', linewidth=3)
-        if preds is not None:
-            plt.plot(x, preds, label='Prediction', linewidth=1)
+    plt.plot(true, label='GroundTruth', linewidth=3)
+    if preds is not None:
+        plt.plot(preds, label='Prediction', linewidth=1)
     plt.title(title)  # 添加标题
     plt.legend()
     plt.savefig(name, bbox_inches='tight')
@@ -76,7 +73,16 @@ def visual(true, preds=None, name='./pic/test.pdf', title='test', x=None, valid_
 
 def RSE(pred, true):
     return np.sqrt(np.sum((true - pred) ** 2)) / np.sqrt(np.sum((true - true.mean()) ** 2))
-
+ 
+class KLDivLoss(nn.Module):
+    def __init__(self):
+        super(KLDivLoss, self).__init__()
+        
+    def forward(self, p, q):
+        p = F.softmax(p.reshape(p.shape[0], -1), dim=-1)
+        q = F.softmax(q.reshape(q.shape[0], -1), dim=-1)
+        loss = F.kl_div(q.log(), p, reduction='batchmean')
+        return loss
 
 def CORR(pred, true):
     u = ((true - true.mean(0)) * (pred - pred.mean(0))).sum(0)

@@ -5,11 +5,12 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pickle
 import numpy as np
 from utils.tools import target_index
+from utils.timefeatures import time_features
 
 
 class Dataset_Series(Dataset):
-    def __init__(self, data_path, columns, flag='train', size=None,
-                 features='M',target='OT', scale=True, data_dim=None, date_unprocessed='no', auto_regression={'status': True, 'value': 2}):
+    def __init__(self, data_path, columns, flag='train', size=None, timeenc=0, freq='T',
+                 features='M',target='OT', scale=True, data_dim=None, auto_regression={'status': True, 'value': 2}):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -31,8 +32,9 @@ class Dataset_Series(Dataset):
         self.scale = scale
         self.columns = columns
         self.scaler = None
+        self.timeenc = timeenc
+        self.freq = freq
         self.data_dim = data_dim
-        self.date_unprocessed = date_unprocessed
 
         self.data_path = data_path
         self.__read_data__()
@@ -74,7 +76,8 @@ class Dataset_Series(Dataset):
         border2 = border2s[self.set_type]
 
         if self.features == 'M' or self.features == 'MS':
-            df_data = df_raw
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
         elif self.features == 'S':
             df_data = df_raw[self.target]
 
@@ -92,9 +95,23 @@ class Dataset_Series(Dataset):
             data = self.__judge_data_dim__(data)
         else:
             data = self.__judge_data_dim__(self.__process_data__(df_data))
+        
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month/11, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day/30, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday()/7, 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour/23, 1)
+            data_stamp = df_stamp.drop(['date'], axis = 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
+
+        self.data_stamp = data_stamp
         # # 给88个数据点一个间隔
         # self.indices = [i for i in range(len(self.data_x) - self.seq_len - self.pred_len + 1) if i % 88 == 0]
 
@@ -109,7 +126,11 @@ class Dataset_Series(Dataset):
 
         seq_x = self.data_x[s_begin:s_end] # encoder_input
         seq_y = self.data_y[r_begin:r_end] # decoder_input
-        return seq_x, seq_y
+
+        seq_x_mark = self.data_stamp[s_begin:s_end] # encoder_time
+        seq_y_mark = self.data_stamp[r_begin:r_end] # decoder_time
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
         # return len(self.indices)

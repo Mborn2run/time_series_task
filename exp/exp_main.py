@@ -13,23 +13,27 @@ logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)
     level=logging.INFO)
 
 
-def _predict(net, batch_x, batch_y, args):
+def _predict(net, batch_x, batch_y, batch_x_mark, batch_y_mark, args):
         # decoder input
         dec_inp = torch.zeros_like(batch_y[:, -args['size'][-1]:, :]).float()
         dec_inp = torch.cat([batch_y[:, :args['size'][1], :], dec_inp], dim=1).float().to(args['device'])
         # encoder - decoder
         def _run_model():
-            outputs = net(batch_x, dec_inp, args['size'][1], args['size'][2])
+            outputs = net(batch_x, batch_x_mark, dec_inp, batch_y_mark, args['size'][1], args['size'][2])
             if args['output_attention']:
                 outputs = outputs[0]
             return outputs
 
-        outputs = _run_model()
+        if args['use_amp']:
+            with torch.cuda.amp.autocast():
+                outputs = _run_model()
+        else:
+            outputs = _run_model()
         
         f_dim = target_index(args['columns'], args['target']) if args['auto_regression']['status'] else args['auto_regression']['value']  # 请替换为你想要的列的索引
         outputs = outputs[:, -args['size'][-1]:, f_dim]
         batch_y = batch_y[:, -args['size'][-1]:, f_dim].to(args['device'])
-        return torch.maximum(outputs, torch.tensor(0.0, device=outputs.device)),  batch_y  # confirm the output is not negative
+        return outputs,  batch_y  # confirm the output is not negative
 
 def train(net, criterion, train_dataloader, valid_dataloader, args):
     def init_xavier(m):
@@ -68,13 +72,16 @@ def train(net, criterion, train_dataloader, valid_dataloader, args):
         train_losses = []
         # 训练开始
         net.train()
-        for i, (encoeder_inp, decoder_inp) in enumerate(tqdm(train_dataloader, desc='训练')):
+        for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(tqdm(train_dataloader, desc='训练')):
             iter_count += 1
             optimizer.zero_grad()
-            encoeder_inp = encoeder_inp.float().to(args['device'])
-            decoder_inp = decoder_inp.float().to(args['device'])
+            batch_x = batch_x.float().to(args['device'])
+            batch_y = batch_y.float().to(args['device'])
 
-            output, targets = _predict(net, encoeder_inp, decoder_inp, args)
+            batch_x_mark = batch_x_mark.float().to(args['device'])
+            batch_y_mark = batch_y_mark.float().to(args['device'])
+
+            output, targets = _predict(net, batch_x, batch_y, batch_x_mark, batch_y_mark, args)
             Loss = criterion(output, targets)
             train_losses.append(Loss.item())
             print(f'第{i+1}次循环的损失值: {Loss.item()}')
@@ -97,10 +104,14 @@ def train(net, criterion, train_dataloader, valid_dataloader, args):
         net.eval()
         eval_loss = []
         with torch.no_grad():
-            for encoeder_inp, decoder_inp in valid_dataloader:
-                encoeder_inp = encoeder_inp.float().to(args['device'])
-                decoder_inp = decoder_inp.float().to(args['device'])
-                output, targets = _predict(net, encoeder_inp, decoder_inp, args)
+            for batch_x, batch_y, batch_x_mark, batch_y_mark in valid_dataloader:
+                batch_x = batch_x.float().to(args['device'])
+                batch_y = batch_y.float().to(args['device'])
+
+                batch_x_mark = batch_x_mark.float().to(args['device'])
+                batch_y_mark = batch_y_mark.float().to(args['device'])
+
+                output, targets = _predict(net, batch_x, batch_y, batch_x_mark, batch_y_mark, args)
 
                 pred = output.detach().cpu()
                 true = targets.detach().cpu()
@@ -112,6 +123,7 @@ def train(net, criterion, train_dataloader, valid_dataloader, args):
 
         # 绘制训练损失和验证损失图并保存
         plt.figure()
+        plt.ioff()  # 关闭交互模式
         plt.plot(range(len(train_losses)), train_losses, label='Train Loss')
         plt.plot(range(len(eval_loss)), eval_loss, label='Validation Loss', color='red')
         plt.xlabel('Batch')
@@ -142,11 +154,14 @@ def test(net, test_dataset, test_dataloader, criterion, args):
 
     net.eval()
     with torch.no_grad():
-        for i, (batch_x, batch_y) in enumerate(test_dataloader):
+        for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_dataloader):
             batch_x = batch_x.float().to(args['device'])
             batch_y = batch_y.float().to(args['device'])
 
-            outputs, target = _predict(net, batch_x, batch_y, args)
+            batch_x_mark = batch_x_mark.float().to(args['device'])
+            batch_y_mark = batch_y_mark.float().to(args['device'])
+
+            outputs, target = _predict(net, batch_x, batch_y, batch_x_mark, batch_y_mark, args)
 
             outputs = outputs.detach().cpu().numpy()
             target = target.detach().cpu().numpy()
@@ -157,27 +172,27 @@ def test(net, test_dataset, test_dataloader, criterion, args):
             preds.append(pred)
             trues.append(true)
             
-            if i % 20 == 0:
+            if i % 2 == 0:
                 input = batch_x.detach().cpu().numpy()
                 f_dim = test_dataset.target_index
                 gt = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], true[0]), axis=0))
                 pd = test_dataset.inverse_transform(np.concatenate((input[0][:, f_dim], pred[0]), axis=0))
-                gt_long = test_dataset.inverse_transform(np.concatenate((input[:,-(10+args['size'][-1]):, f_dim].reshape(-1, len(f_dim)), true.reshape(-1, len(f_dim))), axis=0))
-                pd_long = test_dataset.inverse_transform(np.concatenate((input[:,-(10+args['size'][-1]):, f_dim].reshape(-1, len(f_dim)), pred.reshape(-1, len(f_dim))), axis=0))
-                if args['time_line'] == [None]:
-                    time = None
-                else:
-                    time_dim = target_index(args['columns'], args['time_line'])
-                    time = test_dataset.inverse_transform(np.concatenate((input[0][:, time_dim], 
-                                                                          batch_y.detach().cpu().numpy()[0][-args['size'][-1]:, time_dim]),
-                                                                          axis=0), target_index = time_dim)
+                gt_long = []
+                pd_long = []
+                for k in range(batch_x.shape[0]):
+                    gt_long.append(test_dataset.inverse_transform(true[k])[0])
+                    pd_long.append(test_dataset.inverse_transform(pred[k])[0])
                 if args['features'] == 'M':
                     for j in range(gt.shape[1]):
-                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['target'][j], x=time, valid_len=10+args['size'][-1])
-                        visual(gt_long, pd_long, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], x=time, valid_len=None)
+                        gt_M = [x.reshape(-1) for x in gt_long[:, j]]
+                        pd_M = [x.reshape(-1) for x in pd_long[:, j]]
+                        visual(gt[:, j], pd[:, j], os.path.join(folder_path, str(i) + '_' + str(j) + '.pdf'), title=args['target'][j], valid_len=10+args['size'][-1])
+                        visual(gt_M, pd_M, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], valid_len=None)
                 else:
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'], x=time, valid_len=10+args['size'][-1])
-                    visual(gt_long, pd_long, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], x=time, valid_len=None)
+                    gt_M = [x.reshape(-1) for x in gt_long]
+                    pd_M = [x.reshape(-1) for x in pd_long]
+                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'), title=args['target'], valid_len=10+args['size'][-1])
+                    visual(gt_M, pd_M, os.path.join(folder_path, str(i) + '_long.pdf'), title=args['target'], valid_len=None)
 
     preds = np.concatenate(preds, axis=0)
     trues = np.concatenate(trues, axis=0)

@@ -14,8 +14,8 @@ class ANN(nn.Module):
         self.fc3 = nn.Linear(hidden_dim, output_dim)
         
         
-    def forward(self, x, target, label_len, pred_len):
-        out = self.fc1(x)
+    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec, label_len, pred_len):
+        out = self.fc1(x_enc)
         out = self.relu1(out)
         out = self.fc2(out)
         out = self.relu2(out)
